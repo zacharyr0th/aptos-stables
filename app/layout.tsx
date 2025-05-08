@@ -19,7 +19,7 @@ const fontVars = `${geistSans.variable} ${geistMono.variable}`;
 
 export const metadata = {
   title: "Aptos Stablecoins",
-  description: "Aptos Stablecoins",
+  description: "Real-time stablecoin supply data from the Aptos blockchain",
 };
 
 interface RootLayoutProps {
