@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { DollarSign, Clock, AlertTriangle } from "lucide-react";
+import { DollarSign, AlertTriangle } from "lucide-react";
 import { GeistMono } from 'geist/font/mono';
-import { FaGlobe, FaXTwitter, FaLinkedinIn } from "react-icons/fa6";
 import { 
   Card, 
   CardContent, 
@@ -103,29 +102,6 @@ type DisplayToken = Token | CombinedToken;
 interface SupplyData {
   supplies: Token[];
   total: string;
-}
-
-// Extracted component for timestamp display
-function LastUpdatedTime({ timestamp }: { timestamp: Date }): React.ReactElement {
-  const formattedTime = useMemo(() => {
-    if (!timestamp) return '';
-    
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    }).format(timestamp);
-  }, [timestamp]);
-  
-  return (
-    <div className="flex items-center">
-      <Clock className="h-4 w-4 mr-1" />
-      <span>{formattedTime}</span>
-    </div>
-  );
 }
 
 // Optimize token card by memoizing expensive calculations and component

@@ -7,20 +7,26 @@ interface WindowSize {
 const DEFAULT_WIDTH = 1024;
 
 export function useWindowSize(): WindowSize {
-  const [size, setSize] = useState<WindowSize>({
-    width: typeof window !== 'undefined' ? window.innerWidth : DEFAULT_WIDTH,
-  });
+  const getWidth = () =>
+    typeof window !== 'undefined' ? window.innerWidth : DEFAULT_WIDTH;
+
+  const [width, setWidth] = useState<number>(getWidth);
 
   useEffect(() => {
-    const updateSize = () => {
-      setSize({
-        width: window.innerWidth,
-      });
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      setWidth(prevWidth => (prevWidth !== newWidth ? newWidth : prevWidth));
     };
 
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    window.addEventListener('resize', handleResize, { passive: true });
+
+    // Call once to ensure correct size on mount
+    handleResize();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
-  return size;
-} 
+  return { width };
+}

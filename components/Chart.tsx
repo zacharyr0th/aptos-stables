@@ -4,7 +4,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
   Tooltip,
   TooltipProps,
 } from 'recharts';
@@ -12,7 +11,6 @@ import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { useWindowSize } from '@/hooks/useWindowSize';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import {
   Tooltip as UITooltip,
   TooltipContent,

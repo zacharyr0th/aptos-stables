@@ -36,7 +36,7 @@ class LRUCache {
     this.ttl = ttl;
   }
 
-  get(key: string): { value: bigint; timestamp: number } | undefined {
+  get(key: string): { value: bigint; timestamp: number; isNearingExpiration: boolean } | undefined {
     const entry = this.map.get(key);
     if (!entry) return undefined;
     
@@ -51,7 +51,10 @@ class LRUCache {
     entry.lastAccessed = now;
     this.map.set(key, entry);
     
-    return { value: entry.value, timestamp: entry.timestamp };
+    // Check if entry is nearing expiration (80% of TTL reached)
+    const isNearingExpiration = now - entry.timestamp >= this.ttl * 0.8;
+    
+    return { value: entry.value, timestamp: entry.timestamp, isNearingExpiration };
   }
 
   set(key: string, value: bigint): void {
@@ -128,6 +131,10 @@ const ipRequests = new Map<string, {
   requestTimestamps: number[]; // Array of timestamps for sliding window
 }>();
 
+// Add retry configuration below the rate limit configuration
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 1000; // 1 second
+
 // Zod schemas for validation
 const AssetMetadataSchema = z.object({
   asset_type: z.string(),
@@ -143,23 +150,22 @@ const GraphQLResponseSchema = z.object({
 
 // Get client IP address from request
 async function getClientIp(): Promise<string> {
-  // Get headers object in Next.js App Router
   const headersList = await headers();
   
   // Try different headers for IP, depending on your deployment setup
-  const forwardedFor = headersList.get('x-forwarded-for');
+  const forwardedFor = headersList.get('x-forwarded-for') || '';
   if (forwardedFor) {
     return forwardedFor.split(',')[0].trim();
   }
   
-  const realIp = headersList.get('x-real-ip');
+  const realIp = headersList.get('x-real-ip') || '';
   return realIp ? realIp : 'unknown-ip';
 }
 
 // Check rate limit for a given IP
 function checkRateLimit(ip: string): { allowed: boolean; resetInSeconds?: number } {
   const now = Date.now();
-  let record = ipRequests.get(ip);
+  const record = ipRequests.get(ip);
   
   // If no record exists or window has expired, create new record
   if (!record || now >= record.resetTime) {
@@ -200,10 +206,8 @@ function checkRateLimit(ip: string): { allowed: boolean; resetInSeconds?: number
 // Clean up expired rate limit entries and stale cache entries periodically
 // Use self-invocation rather than setInterval to ensure cleanup 
 // continues even if errors occur in a cleanup cycle
-let cleanupTimeout: NodeJS.Timeout | null = null;
-
 function scheduleCleanup() {
-  cleanupTimeout = setTimeout(() => {
+  setTimeout(() => {
     try {
       const now = Date.now();
       
@@ -233,7 +237,7 @@ function scheduleCleanup() {
       
     } catch (error) {
       // Minimal generic error message
-      console.error('Cleanup error occurred');
+      console.error('Cleanup error occurred:', error);
     } finally {
       // Always reschedule regardless of success/failure
       scheduleCleanup();
@@ -244,89 +248,49 @@ function scheduleCleanup() {
 // Start the cleanup process
 scheduleCleanup();
 
-/** Fetch supply for a specific token with memoization */
-async function fetchSupply(assetType: string): Promise<bigint> {
-  const cached = cache.get(assetType);
-  
-  if (cached) {
-    return cached.value;
-  }
-
+// Retry helper function
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES, delay = RETRY_DELAY): Promise<Response> {
   try {
-    const r = await fetch(INDEXER, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: GQL, variables: { types: [assetType] } }),
-      cache: 'no-store',
-    });
-
-    // Check for rate limiting or server errors
-    if (r.status === 429) {
-      // Generic message without token type to reduce pattern exposure
-      console.warn('Rate limit reached');
-      // Return cached value if available (even if expired)
-      const expiredCache = cache.get(assetType);
-      if (expiredCache) return expiredCache.value;
-      throw new Error(`Rate limited by Aptos Indexer`);
-    }
-
-    if (!r.ok) throw new Error(`API request failed with status ${r.status}`);
-
-    const responseData = await r.json();
+    const response = await fetch(url, options);
     
-    // Validate response structure
-    const validatedResponse = GraphQLResponseSchema.safeParse(responseData);
-    
-    if (!validatedResponse.success) {
-      console.warn('Response validation failed');
-      // Return cached value if available (even if expired)
-      const expiredCache = cache.get(assetType);
-      if (expiredCache) return expiredCache.value;
-      throw new Error('Data validation error');
+    // Don't retry for certain status codes
+    if (response.status === 429 || response.status >= 400 && response.status < 500) {
+      return response;
     }
     
-    const { data, errors } = validatedResponse.data;
-    
-    if (errors && errors.length > 0) {
-      console.warn('Received GraphQL errors');
-      // Return cached value if available (even if expired)
-      const expiredCache = cache.get(assetType);
-      if (expiredCache) return expiredCache.value;
-      throw new Error('Data fetch error');
+    if (!response.ok && retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(url, options, retries - 1, delay * 1.5); // Exponential backoff
     }
-
-    const result = data.fungible_asset_metadata.find(
-      (item) => item.asset_type === assetType
-    );
     
-    if (!result?.supply_v2) {
-      // Return cached value if available (even if expired)
-      const expiredCache = cache.get(assetType);
-      if (expiredCache) return expiredCache.value;
-      throw new Error(`Supply data unavailable`);
-    }
-
-    const supply = BigInt(result.supply_v2);
-    cache.set(assetType, supply);
-    return supply;
+    return response;
   } catch (error) {
-    // Generic error without exposing specific token or error details
-    console.warn('Supply fetch failed');
-    // Return cached value if available (even if expired)
-    const expiredCache = cache.get(assetType);
-    if (expiredCache) {
-      return expiredCache.value;
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error; // Don't retry timeouts
     }
-    throw new Error(`Failed to fetch supply data`);
+    
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(url, options, retries - 1, delay * 1.5); // Exponential backoff
+    }
+    
+    throw error;
   }
 }
 
 /** Fetch all supplies in a single GraphQL query */
 async function fetchAllSupplies(): Promise<Record<string, bigint>> {
   const tokenTypes = Object.values(TOKENS);
-  const missingTypes = tokenTypes.filter(type => !cache.has(type));
+  const expiredTypes = tokenTypes.filter(type => !cache.has(type));
+  const nearingExpirationTypes = tokenTypes.filter(type => {
+    const entry = cache.get(type);
+    return entry?.isNearingExpiration === true;
+  });
   
-  if (missingTypes.length === 0) {
+  // Combine tokens that need refreshing (either expired or nearing expiration)
+  const typesToFetch = [...new Set([...expiredTypes, ...nearingExpirationTypes])];
+  
+  if (typesToFetch.length === 0) {
     // Return all from cache
     return Object.fromEntries(
       tokenTypes.map(type => {
@@ -337,12 +301,22 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
   }
   
   try {
-    const r = await fetch(INDEXER, {
+    // Set up AbortController with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const fetchOptions = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: GQL, variables: { types: missingTypes } }),
-      cache: 'no-store',
-    });
+      body: JSON.stringify({ query: GQL, variables: { types: typesToFetch } }),
+      cache: 'no-store' as RequestCache,
+      signal: controller.signal,
+    };
+    
+    const r = await fetchWithRetry(INDEXER, fetchOptions);
+    
+    // Clear timeout after response received
+    clearTimeout(timeoutId);
 
     // Check for rate limiting
     if (r.status === 429) {
@@ -388,7 +362,7 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
     });
     
     // Check for missing types in the response without logging specific tokens
-    const missingCount = missingTypes.filter(type => !updatedTypes.has(type)).length;
+    const missingCount = typesToFetch.filter(type => !updatedTypes.has(type)).length;
     if (missingCount > 0) {
       console.warn(`Missing data for ${missingCount} tokens`);
     }
@@ -405,6 +379,7 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
     );
   } catch (error) {
     console.warn('Failed to fetch all supplies');
+    console.error('Fetch all supplies error details:', error);
     // Try to return as much cached data as possible
     return fallbackToCachedValues(tokenTypes);
   }
@@ -430,6 +405,19 @@ function fallbackToCachedValues(tokenTypes: string[]): Record<string, bigint> {
   }
   
   return result;
+}
+
+// Use simpler ETag generation without conditional responses
+function generateETag(data: Record<string, unknown>): string {
+  // Simple hash function for generating ETag
+  const str = JSON.stringify(data);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return `"${hash.toString(16)}"`;
 }
 
 /** 4) API route */
@@ -476,13 +464,20 @@ export async function GET() {
       const total = results
         .reduce((sum, { supply }) => sum + BigInt(supply), BigInt(0))
         .toString();
-
-      return NextResponse.json({ 
+        
+      const responseData = { 
         supplies: results, 
         total,
         cached: cache.size > 0
-      }, {
+      };
+      
+      // Generate ETag for response
+      const etag = generateETag(responseData);
+      
+      return NextResponse.json(responseData, {
         headers: {
+          'Cache-Control': 's-maxage=60, stale-while-revalidate=30',
+          'ETag': etag,
           'X-RateLimit-Limit': RATE_LIMIT_MAX_REQUESTS.toString(),
           'X-RateLimit-Remaining': remainingRequests.toString(),
           'X-RateLimit-Reset': resetTime.toString(),
@@ -541,7 +536,7 @@ export async function GET() {
       throw error;
     }
   } catch (error) {
-    console.warn('API request failed');
+    console.error('API request failed:', error);
     // Don't expose internal error details to client
     return NextResponse.json(
       { error: 'Internal server error', message: 'Failed to process request' },

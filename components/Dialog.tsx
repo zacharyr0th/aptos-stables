@@ -157,7 +157,7 @@ const TokenDialog: React.FC<TokenDialogProps> = ({
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 text-sm hover:underline text-primary"
                   >
-                    {issuerName}'s Website <ExternalLink className="h-3 w-3" />
+                    {issuerName}&apos;s Website <ExternalLink className="h-3 w-3" />
                   </a>
                   <a
                     href={metadata.auditLink}
