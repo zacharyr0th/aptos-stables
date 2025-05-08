@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import Image from 'next/image';
 import { ExternalLink, Copy } from 'lucide-react';
 import { toast } from 'sonner';
@@ -37,6 +37,14 @@ interface TokenMetadata {
   tags: string[];
 }
 
+interface SupplyApiResponse {
+  supplies: Array<{
+    symbol: string;
+    supply: string;
+  }>;
+  total: string;
+}
+
 const TokenDialog: React.FC<TokenDialogProps> = ({
   isOpen,
   onClose,
@@ -44,8 +52,41 @@ const TokenDialog: React.FC<TokenDialogProps> = ({
   supply
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [fullSupplyData, setFullSupplyData] = useState<Record<string, string>>({});
+  const [isLoadingSupply, setIsLoadingSupply] = useState(false);
 
   const symbolParts = useMemo(() => metadata.symbol.split(' / '), [metadata.symbol]);
+
+  // Fetch the full supply data when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      const fetchSupplyData = async () => {
+        setIsLoadingSupply(true);
+        try {
+          const response = await fetch('/api/supply');
+          if (!response.ok) {
+            throw new Error('Failed to fetch supply data');
+          }
+          
+          const data: SupplyApiResponse = await response.json();
+          const supplyMap: Record<string, string> = {};
+          
+          // Create a map of symbol to full supply amount
+          data.supplies.forEach(item => {
+            supplyMap[item.symbol] = item.supply;
+          });
+          
+          setFullSupplyData(supplyMap);
+        } catch (error) {
+          console.error('Error fetching supply data:', error);
+        } finally {
+          setIsLoadingSupply(false);
+        }
+      };
+      
+      fetchSupplyData();
+    }
+  }, [isOpen]);
 
   const handleCopy = useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -77,19 +118,41 @@ const TokenDialog: React.FC<TokenDialogProps> = ({
   }, [metadata.assetAddress, symbolParts, handleCopy]);
 
   const formattedSupply = useMemo(() => {
-    const parts = supply.split(' / ');
-    return parts.length > 1 ? (
-      <div className="space-y-1">
-        {parts.map((amount, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span>{symbolParts[i]}: {amount}</span>
-          </div>
-        ))}
-      </div>
-    ) : (
-      <span>{supply}</span>
-    );
-  }, [supply, symbolParts]);
+    if (isLoadingSupply) {
+      return <span className="text-muted-foreground text-sm">Loading...</span>;
+    }
+
+    const formatFullAmount = (symbol: string) => {
+      // Get the raw value from API data
+      const rawSupply = fullSupplyData[symbol];
+      if (!rawSupply) return supply; // Fall back to abbreviated value if not found
+      
+      // Convert to decimal based on token decimals
+      const value = Number(BigInt(rawSupply)) / Math.pow(10, metadata.decimals);
+      
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 2
+      }).format(value);
+    };
+    
+    // Handle combined token case (sUSDe / USDe)
+    if (symbolParts.length > 1) {
+      return (
+        <div className="space-y-1">
+          {symbolParts.map((symbol, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span>{symbol}: {formatFullAmount(symbol)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    // Handle single token case
+    return <span>{formatFullAmount(metadata.symbol)}</span>;
+  }, [supply, fullSupplyData, isLoadingSupply, symbolParts, metadata]);
 
   const formattedExplorerLinks = useMemo(() => {
     const links = metadata.explorerLink.split('\n');
@@ -195,8 +258,8 @@ const TokenDialog: React.FC<TokenDialogProps> = ({
 
 const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div className="flex gap-4 items-start">
-    <span className="text-sm text-muted-foreground w-[120px]">{label}</span>
-    <div>{value}</div>
+    <span className="text-sm text-muted-foreground w-[120px] flex-shrink-0">{label}</span>
+    <div className="flex-1">{value}</div>
   </div>
 );
 

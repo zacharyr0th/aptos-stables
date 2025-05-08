@@ -1,6 +1,6 @@
 import React from 'react';
 import { Clock } from "lucide-react";
-import { FaGlobe, FaXTwitter, FaLinkedinIn } from "react-icons/fa6";
+import { FaGlobe, FaXTwitter, FaGithub } from "react-icons/fa6";
 import { ErrorBoundary } from '../errors/ErrorBoundary';
 
 interface FooterProps {
@@ -35,25 +35,32 @@ const FooterComponent = ({ lastUpdated }: FooterProps): React.ReactElement => {
   return (
     <ErrorBoundary>
       <footer className="pt-2 pb-4">
-        <div className="flex flex-col sm:flex-row justify-between items-center text-xs sm:text-sm text-muted-foreground gap-2">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-4">
+        <div className="flex flex-col lg:flex-row lg:justify-between items-center text-xs sm:text-sm text-muted-foreground gap-3 lg:gap-2">
+          {lastUpdated && (
+            <div className="flex justify-center lg:justify-start order-first lg:order-last mb-2 lg:mb-0">
+              <LastUpdatedTime timestamp={lastUpdated} />
+            </div>
+          )}
+          
+          <div className="flex flex-col lg:flex-row items-center gap-3 lg:gap-4">
+            <span className="hidden lg:block text-muted-foreground">|</span>
+
+            <p className="text-center lg:text-left mb-2 lg:mb-0 order-first lg:order-none">
+              Powered by the <a href="https://aptos.dev/en/build/indexer" target="_blank" rel="noreferrer" className="underline hover:text-accent-foreground transition-colors">Aptos Indexer</a>
+            </p>
+            
+            <div className="flex gap-6 justify-center items-center order-last lg:order-first">
               <a href="https://www.zacharyr0th.com/" target="_blank" rel="noreferrer" className="hover:text-accent-foreground transition-colors">
                 <FaGlobe className="w-4 h-4" />
               </a>
               <a href="https://x.com/zacharyr0th" target="_blank" rel="noreferrer" className="hover:text-accent-foreground transition-colors">
                 <FaXTwitter className="w-4 h-4" />
               </a>
-              <a href="https://www.linkedin.com/in/zacharyr0th/" target="_blank" rel="noreferrer" className="hover:text-accent-foreground transition-colors">
-                <FaLinkedinIn className="w-4 h-4" />
+              <a href="https://github.com/zacharyr0th/aptos-stables" target="_blank" rel="noreferrer" className="hover:text-accent-foreground transition-colors">
+                <FaGithub className="w-4 h-4" />
               </a>
             </div>
-            <span className="text-muted-foreground">|</span>
-            <p>
-              Powered by the <a href="https://aptos.dev/en/build/indexer" target="_blank" rel="noreferrer" className="underline hover:text-accent-foreground transition-colors">Aptos Indexer</a>.
-            </p>
           </div>
-          {lastUpdated && <LastUpdatedTime timestamp={lastUpdated} />}
         </div>
       </footer>
     </ErrorBoundary>

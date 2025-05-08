@@ -56,7 +56,7 @@ export const TOKEN_COLORS: Record<string, string> = {
 };
 
 const CHART_DIMENSIONS = {
-  mobile: { innerRadius: '56%', outerRadius: '98%' },
+  mobile: { innerRadius: '54%', outerRadius: '95%' },
   desktop: { innerRadius: '63%', outerRadius: '99%' },
 };
 
@@ -237,7 +237,7 @@ export function MarketShareChart({
   return (
     <div className="flex items-center justify-center w-full h-full">
       <div className="flex items-center">
-        <div className="w-64 h-64">
+        <div className={isMobile ? "w-56 h-56" : "w-64 h-64"}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie

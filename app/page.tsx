@@ -393,10 +393,10 @@ export default function Home(): React.ReactElement {
           {refreshing && <div className="h-full bg-muted animate-pulse"></div>}
         </div>
         
-        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-5">
           <Header />
 
-          <main>
+          <main className="my-2">
             {loading ? (
               <LoadingState />
             ) : error ? (
@@ -445,7 +445,7 @@ export default function Home(): React.ReactElement {
             ) : null}
           </main>
 
-          <div className="mt-6">
+          <div className="mt-4">
             <Footer lastUpdated={lastUpdated} />
           </div>
         </div>

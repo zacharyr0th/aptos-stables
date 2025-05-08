@@ -5,10 +5,10 @@ import { ErrorBoundary } from '../errors/ErrorBoundary';
 const HeaderComponent = (): React.ReactElement => {
   return (
     <ErrorBoundary>
-      <header className="mb-4 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className="relative mb-3 sm:mb-5 sm:flex sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold mb-1 sm:mb-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold mb-2 sm:mb-3">
               Aptos Stablecoins
             </h1>
             <p className="text-muted-foreground text-base sm:text-lg">
@@ -17,8 +17,10 @@ const HeaderComponent = (): React.ReactElement => {
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
-          <ThemeToggle />
+        <div className="absolute top-0 right-0 sm:relative sm:flex sm:items-center gap-3">
+          <div className="scale-90 sm:scale-100">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
     </ErrorBoundary>

@@ -20,7 +20,7 @@ export function ThemeToggle() {
       <Button
         variant="outline"
         size="icon"
-        className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+        className="!bg-popover/95 !backdrop-blur !border !shadow-lg text-foreground"
         aria-label="Toggle theme"
         disabled
       >
@@ -37,7 +37,7 @@ export function ThemeToggle() {
     <Button
       variant="outline"
       size="icon"
-      className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+      className="!bg-popover/95 !backdrop-blur !border !shadow-lg text-foreground"
       aria-label={`Switch to ${nextTheme} mode`}
       onClick={() => setTheme(nextTheme)}
     >
