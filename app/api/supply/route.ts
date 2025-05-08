@@ -116,7 +116,7 @@ class LRUCache {
 }
 
 // Cache and TTL configuration
-const CACHE_TTL = 60000; // 60 seconds (increased from 5 seconds)
+const CACHE_TTL = 3600000; // 1 hour (increased from 60 seconds)
 const MAX_CACHE_SIZE = 100; // Maximum number of entries to prevent unbounded growth
 const cache = new LRUCache(MAX_CACHE_SIZE, CACHE_TTL);
 
