@@ -13,6 +13,12 @@ import { toast } from 'sonner';
 import { useWindowSize } from '@/hooks/useWindowSize';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export interface Token {
   symbol: string;
@@ -100,25 +106,34 @@ const TokenNameCopy: React.FC<{
   }
 
   return (
-    <span className="relative inline-block">
-      <span 
-        onClick={() => handleCopy(address, symbol)}
-        className="text-sm font-medium cursor-pointer hover:text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-primary after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:origin-left"
-      >
-        {symbol}
-      </span>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-5 w-5 ml-0.5 p-0 opacity-0 hover:opacity-100 inline-flex align-middle"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleCopy(address, symbol);
-        }}
-      >
-        <Copy className="h-3 w-3" />
-      </Button>
-    </span>
+    <TooltipProvider>
+      <UITooltip>
+        <TooltipTrigger asChild>
+          <span className="relative inline-flex items-center group cursor-pointer">
+            <span 
+              onClick={() => handleCopy(address, symbol)}
+              className="text-sm font-medium group-hover:text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-primary after:scale-x-0 group-hover:after:scale-x-100 hover:after:scale-x-100 after:transition-transform after:origin-left"
+            >
+              {symbol}
+            </span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5 ml-0.5 p-0 inline-flex align-middle cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCopy(address, symbol);
+              }}
+            >
+              <Copy className="h-3 w-3" />
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Copy {symbol} Address</p>
+        </TooltipContent>
+      </UITooltip>
+    </TooltipProvider>
   );
 };
 

@@ -7,11 +7,11 @@ A simple API service and frontend that provides real-time information about stab
 
 This API fetches the current circulating supply of major stablecoins on Aptos using the Aptos Indexer GraphQL API. It handles both token standards (legacy coin standard and newer Fungible-Asset standard) in a unified way.
 
-![Aptos Stablecoins Dashboard](page.png)
+![Aptos Stablecoins Dashboard](/public/page.png)
 
 You can view detailed information about each stablecoin by clicking on its card:
 
-![Detailed stablecoin information dialog](dialog.png)
+![Detailed stablecoin information dialog](/public/dialog.png)
 
 ## Supported Stablecoins
 
