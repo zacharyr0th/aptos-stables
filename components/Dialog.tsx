@@ -116,7 +116,7 @@ const TokenDialog: React.FC<TokenDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl bg-card">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="relative w-12 h-12">
