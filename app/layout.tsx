@@ -3,6 +3,7 @@ import "./globals.css";
 import React, { ReactNode } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { Analytics } from "@vercel/analytics/react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: RootLayoutProps): React.ReactEl
             {children}
           </main>
           <Toaster />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
