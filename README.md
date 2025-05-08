@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Aptos Stablecoin Supply API
 
-## Getting Started
+A simple API service that provides real-time information about stablecoin supplies on the Aptos blockchain.
 
-First, run the development server:
+## Overview
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+This API fetches the current circulating supply of major stablecoins on Aptos using the Aptos Indexer GraphQL API. It handles both token standards (legacy coin standard and newer Fungible-Asset standard) in a unified way.
+
+## Supported Stablecoins
+
+- **USDt**: Tether USD (USDT)
+- **USDC**: Circle USD Coin (USDC)
+- **USDe**: Ethena USDe
+- **sUSDe**: Staked USDe
+
+## API Endpoint
+
+### GET `/api/supply`
+
+Returns the current supply of each stablecoin and the total supply across all supported stablecoins.
+
+#### Example Response
+
+```json
+{
+  "supplies": [
+    {
+      "symbol": "USDt",
+      "supply": "1130000000600000"
+    },
+    {
+      "symbol": "USDC",
+      "supply": "284452249983816"
+    },
+    {
+      "symbol": "USDe",
+      "supply": "183411687"
+    },
+    {
+      "symbol": "sUSDe",
+      "supply": "65235918477665"
+    }
+  ],
+  "total": "1479688352473168"
+}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Technical Details
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+- Uses the Aptos Indexer GraphQL API to fetch supply data
+- Supplies are returned as strings to preserve precision with large numbers
+- The server runs on port 3001 by default
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Local Development
 
-## Learn More
+```bash
+# Install dependencies
+npm install
 
-To learn more about Next.js, take a look at the following resources:
+# Start the development server
+npm run dev
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Build for production
+npm run build
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Start the production server
+npm run start
+```
 
-## Deploy on Vercel
+## Testing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+To test the API, start the server and run:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+curl http://localhost:3001/api/supply | jq
+```
+
+## License
+
+MIT
