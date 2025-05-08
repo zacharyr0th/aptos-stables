@@ -1,6 +1,6 @@
 # Aptos Stablecoin Supply API
 
-A simple API service that provides real-time information about stablecoin supplies on the Aptos blockchain.
+A simple API service and frontend that provides real-time information about stablecoin supplies on the Aptos blockchain.
 
 ## Overview
 
@@ -10,7 +10,7 @@ This API fetches the current circulating supply of major stablecoins on Aptos us
 
 - **USDt**: Tether USD (USDT)
 - **USDC**: Circle USD Coin (USDC)
-- **USDe**: Ethena USDe
+- **USDe**: Ethena's USDe
 - **sUSDe**: Staked USDe
 
 ## API Endpoint
@@ -74,6 +74,23 @@ To test the API, start the server and run:
 ```bash
 curl http://localhost:3001/api/supply | jq
 ```
+
+## Contributing
+
+Contributions are welcome- please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature-name`
+3. Commit your changes: `git commit -m 'Add some feature'`
+4. Push to the branch: `git push origin feature/your-feature-name`
+5. Open a Pull Request
+
+### Adding Support for New Stablecoins
+
+To add support for a new stablecoin:
+1. Add the token information to the `TOKENS` object in `app/api/supply/route.ts`
+2. Add metadata for the UI in `app/page.tsx` in the `TOKEN_METADATA` object
+3. Add an icon in the `public/icons` directory
 
 ## License
 

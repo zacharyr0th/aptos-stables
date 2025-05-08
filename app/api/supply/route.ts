@@ -1,5 +1,4 @@
-// Next.js 13+ "app router" style.  For the older "pages" router,
-// rename the file to /pages/api/supply.ts and replace the export.
+// Next.js 13+ "app router" style
 
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
@@ -12,8 +11,8 @@ const INDEXER = 'https://indexer.mainnet.aptoslabs.com/v1/graphql';
 const TOKENS: Record<string, string> = {
   // Using the short form addresses (without the module::struct part)
   USDt:  '0x357b0b74bc833e95a115ad22604854d6b0fca151cecd94111770e5d6ffc9dc2b',  // Tether
-  USDC:  '0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41c94180b46f3b',  // Circle native
-  USDe:  '0xf37a8864fe737eb8ec2c2931047047cbaed1beed3fb0e5b7c5526dafd3b9c2e9',  // Ethena
+  USDC:  '0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41c94180b46f3b',  // Circle
+  USDe:  '0xf37a8864fe737eb8ec2c2931047047cbaed1beed3fb0e5b7c5526dafd3b9c2e9',  // Ethena' USDe
   sUSDe: '0xb30a694a344edee467d9f82330bbe7c3b89f440a1ecd2da1f3bca266560fce69',  // Staked USDe
 };
 
@@ -120,8 +119,14 @@ const cache = new LRUCache(MAX_CACHE_SIZE, CACHE_TTL);
 
 // Rate limiting configuration
 const RATE_LIMIT_WINDOW = 60000; // 1 minute window
-const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute
-const ipRequests = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_MAX_REQUESTS = 15; // 15 requests per minute (reduced from 30)
+const BURST_LIMIT = 5; // Maximum requests in a 10-second period
+const BURST_WINDOW = 10000; // 10 seconds
+const ipRequests = new Map<string, { 
+  count: number; 
+  resetTime: number;
+  requestTimestamps: number[]; // Array of timestamps for sliding window
+}>();
 
 // Zod schemas for validation
 const AssetMetadataSchema = z.object({
@@ -154,21 +159,36 @@ async function getClientIp(): Promise<string> {
 // Check rate limit for a given IP
 function checkRateLimit(ip: string): { allowed: boolean; resetInSeconds?: number } {
   const now = Date.now();
-  const record = ipRequests.get(ip);
+  let record = ipRequests.get(ip);
   
   // If no record exists or window has expired, create new record
   if (!record || now >= record.resetTime) {
     ipRequests.set(ip, { 
       count: 1, 
-      resetTime: now + RATE_LIMIT_WINDOW 
+      resetTime: now + RATE_LIMIT_WINDOW,
+      requestTimestamps: [now]
     });
     return { allowed: true };
   }
   
-  // Increment request count
+  // Clean up old timestamps outside of burst window
+  record.requestTimestamps = record.requestTimestamps.filter(
+    timestamp => (now - timestamp) < BURST_WINDOW
+  );
+  
+  // Add current timestamp
+  record.requestTimestamps.push(now);
+  
+  // Check for burst limit (too many requests in a short period)
+  if (record.requestTimestamps.length > BURST_LIMIT) {
+    const resetInSeconds = Math.ceil(BURST_WINDOW / 1000);
+    return { allowed: false, resetInSeconds };
+  }
+  
+  // Increment request count for the longer window
   record.count++;
   
-  // Check if over limit
+  // Check if over limit for the main window
   if (record.count > RATE_LIMIT_MAX_REQUESTS) {
     const resetInSeconds = Math.ceil((record.resetTime - now) / 1000);
     return { allowed: false, resetInSeconds };
@@ -187,10 +207,24 @@ function scheduleCleanup() {
     try {
       const now = Date.now();
       
-      // Clean up rate limit entries
+      // Clean up rate limit entries more aggressively
       for (const [ip, data] of ipRequests.entries()) {
+        // Remove if reset time has passed
         if (now >= data.resetTime) {
           ipRequests.delete(ip);
+          continue;
+        }
+        
+        // Clean expired timestamps from sliding window
+        data.requestTimestamps = data.requestTimestamps.filter(
+          timestamp => (now - timestamp) < BURST_WINDOW
+        );
+        
+        // If client hasn't made requests recently (30s of inactivity), reduce count
+        const mostRecentRequest = Math.max(...data.requestTimestamps, 0);
+        if (now - mostRecentRequest > 30000 && data.count > 0) {
+          // Gradually reduce count to allow recovery without full reset
+          data.count = Math.max(0, data.count - 3);
         }
       }
       
@@ -198,12 +232,13 @@ function scheduleCleanup() {
       cache.cleanExpired();
       
     } catch (error) {
-      console.error('Error during cleanup:', error);
+      // Minimal generic error message
+      console.error('Cleanup error occurred');
     } finally {
       // Always reschedule regardless of success/failure
       scheduleCleanup();
     }
-  }, 60000); // Run cleanup every minute
+  }, 30000); // Run cleanup every 30 seconds (reduced from 60 seconds)
 }
 
 // Start the cleanup process
@@ -227,9 +262,11 @@ async function fetchSupply(assetType: string): Promise<bigint> {
 
     // Check for rate limiting or server errors
     if (r.status === 429) {
-      console.warn(`Rate limit reached for ${assetType}`);
+      // Generic message without token type to reduce pattern exposure
+      console.warn('Rate limit reached');
       // Return cached value if available (even if expired)
-      if (cached) return cached.value;
+      const expiredCache = cache.get(assetType);
+      if (expiredCache) return expiredCache.value;
       throw new Error(`Rate limited by Aptos Indexer`);
     }
 
@@ -241,18 +278,20 @@ async function fetchSupply(assetType: string): Promise<bigint> {
     const validatedResponse = GraphQLResponseSchema.safeParse(responseData);
     
     if (!validatedResponse.success) {
-      console.error('Invalid response structure:', validatedResponse.error);
+      console.warn('Response validation failed');
       // Return cached value if available (even if expired)
-      if (cached) return cached.value;
+      const expiredCache = cache.get(assetType);
+      if (expiredCache) return expiredCache.value;
       throw new Error('Data validation error');
     }
     
     const { data, errors } = validatedResponse.data;
     
     if (errors && errors.length > 0) {
-      console.error('GraphQL errors:', errors);
+      console.warn('Received GraphQL errors');
       // Return cached value if available (even if expired)
-      if (cached) return cached.value;
+      const expiredCache = cache.get(assetType);
+      if (expiredCache) return expiredCache.value;
       throw new Error('Data fetch error');
     }
 
@@ -262,7 +301,8 @@ async function fetchSupply(assetType: string): Promise<bigint> {
     
     if (!result?.supply_v2) {
       // Return cached value if available (even if expired)
-      if (cached) return cached.value;
+      const expiredCache = cache.get(assetType);
+      if (expiredCache) return expiredCache.value;
       throw new Error(`Supply data unavailable`);
     }
 
@@ -270,11 +310,12 @@ async function fetchSupply(assetType: string): Promise<bigint> {
     cache.set(assetType, supply);
     return supply;
   } catch (error) {
-    console.error(`Failed to fetch supply for ${assetType}:`, error);
+    // Generic error without exposing specific token or error details
+    console.warn('Supply fetch failed');
     // Return cached value if available (even if expired)
-    if (cached) {
-      console.log(`Using cached data for ${assetType}`);
-      return cached.value;
+    const expiredCache = cache.get(assetType);
+    if (expiredCache) {
+      return expiredCache.value;
     }
     throw new Error(`Failed to fetch supply data`);
   }
@@ -305,13 +346,13 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
 
     // Check for rate limiting
     if (r.status === 429) {
-      console.warn('Rate limit reached from Aptos Indexer, using cached data where available');
+      console.warn('Rate limit reached, using cache');
       // Fall back to cached values, even if expired
       return Object.fromEntries(
         tokenTypes.map(type => {
           const cached = cache.get(type);
           if (cached) return [type, cached.value];
-          throw new Error(`No cached data available for ${type} during rate limiting`);
+          throw new Error(`No cached data available during rate limiting`);
         })
       );
     }
@@ -324,7 +365,7 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
     const validatedResponse = GraphQLResponseSchema.safeParse(responseData);
     
     if (!validatedResponse.success) {
-      console.error('Invalid response structure:', validatedResponse.error);
+      console.warn('Response validation failed');
       // Fall back to cached values
       return fallbackToCachedValues(tokenTypes);
     }
@@ -332,7 +373,7 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
     const { data, errors } = validatedResponse.data;
     
     if (errors && errors.length > 0) {
-      console.error('GraphQL errors:', errors);
+      console.warn('Received GraphQL errors');
       // Fall back to cached values
       return fallbackToCachedValues(tokenTypes);
     }
@@ -346,10 +387,10 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
       }
     });
     
-    // Check for missing types in the response
-    const missingFromResponse = missingTypes.filter(type => !updatedTypes.has(type));
-    if (missingFromResponse.length > 0) {
-      console.warn(`Missing data for tokens: ${missingFromResponse.join(', ')}`);
+    // Check for missing types in the response without logging specific tokens
+    const missingCount = missingTypes.filter(type => !updatedTypes.has(type)).length;
+    if (missingCount > 0) {
+      console.warn(`Missing data for ${missingCount} tokens`);
     }
     
     // Return combined data (newly fetched + cached)
@@ -357,14 +398,13 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
       tokenTypes.map(type => {
         const cached = cache.get(type);
         if (!cached) {
-          console.error(`No data available for ${type}`);
-          throw new Error(`Supply data unavailable for ${type}`);
+          throw new Error(`Supply data unavailable`);
         }
         return [type, cached.value];
       })
     );
   } catch (error) {
-    console.error('Failed to fetch supplies:', error);
+    console.warn('Failed to fetch all supplies');
     // Try to return as much cached data as possible
     return fallbackToCachedValues(tokenTypes);
   }
@@ -373,20 +413,20 @@ async function fetchAllSupplies(): Promise<Record<string, bigint>> {
 // Helper function to return cached values in error scenarios
 function fallbackToCachedValues(tokenTypes: string[]): Record<string, bigint> {
   const result: Record<string, bigint> = {};
-  let missingTokens: string[] = [];
+  let missingCount = 0;
   
   tokenTypes.forEach(type => {
     const cached = cache.get(type);
     if (cached) {
       result[type] = cached.value;
     } else {
-      missingTokens.push(type);
+      missingCount++;
     }
   });
   
-  if (missingTokens.length > 0) {
-    console.error(`No cached data available for: ${missingTokens.join(', ')}`);
-    throw new Error(`Missing data for some tokens: ${missingTokens.join(', ')}`);
+  if (missingCount > 0) {
+    console.warn(`Missing cached data for ${missingCount} tokens`);
+    throw new Error(`Missing data for some tokens`);
   }
   
   return result;
@@ -403,19 +443,28 @@ export async function GET() {
       return NextResponse.json(
         { 
           error: 'Rate limit exceeded', 
-          message: `Too many requests. Try again in ${rateLimitResult.resetInSeconds} seconds.` 
+          message: `Woah! Please slow down there. Try again in ${rateLimitResult.resetInSeconds} seconds.` 
         },
         { 
           status: 429,
           headers: {
             'X-RateLimit-Limit': RATE_LIMIT_MAX_REQUESTS.toString(),
+            'X-RateLimit-Remaining': '0',
             'X-RateLimit-Reset': (rateLimitResult.resetInSeconds || 0).toString(),
-            'Retry-After': (rateLimitResult.resetInSeconds || 60).toString()
+            'X-RateLimit-Burst-Limit': BURST_LIMIT.toString(),
+            'Retry-After': (rateLimitResult.resetInSeconds || 60).toString(),
+            'X-Rate-Limit-Policy': 'sliding-window'
           }
         }
       );
     }
     
+    // Calculate remaining requests for headers
+    const record = ipRequests.get(clientIp);
+    const remainingRequests = record ? Math.max(0, RATE_LIMIT_MAX_REQUESTS - record.count) : RATE_LIMIT_MAX_REQUESTS;
+    const resetTime = record ? Math.ceil((record.resetTime - Date.now()) / 1000) : RATE_LIMIT_WINDOW / 1000;
+    const burstRemaining = record ? Math.max(0, BURST_LIMIT - record.requestTimestamps.length) : BURST_LIMIT;
+
     try {
       // Option 2: Batch request (more efficient)
       const allSupplies = await fetchAllSupplies();
@@ -432,10 +481,18 @@ export async function GET() {
         supplies: results, 
         total,
         cached: cache.size > 0
+      }, {
+        headers: {
+          'X-RateLimit-Limit': RATE_LIMIT_MAX_REQUESTS.toString(),
+          'X-RateLimit-Remaining': remainingRequests.toString(),
+          'X-RateLimit-Reset': resetTime.toString(),
+          'X-RateLimit-Burst-Limit': BURST_LIMIT.toString(),
+          'X-RateLimit-Burst-Remaining': burstRemaining.toString()
+        }
       });
     } catch (error) {
-      // Handle partial data scenario
-      console.error('Error fetching all supplies:', error);
+      // Handle partial data scenario without detailed error logging
+      console.warn('Error fetching complete supply data');
       
       // Try to return partial data if possible
       const partialResults = [];
@@ -468,14 +525,23 @@ export async function GET() {
           cached: true,
           partial: true,
           message: "Some data could not be fetched. Showing partial results with cached data."
-        }, { status: 206 }); // 206 Partial Content
+        }, { 
+          status: 206, // 206 Partial Content
+          headers: {
+            'X-RateLimit-Limit': RATE_LIMIT_MAX_REQUESTS.toString(),
+            'X-RateLimit-Remaining': remainingRequests.toString(),
+            'X-RateLimit-Reset': resetTime.toString(),
+            'X-RateLimit-Burst-Limit': BURST_LIMIT.toString(),
+            'X-RateLimit-Burst-Remaining': burstRemaining.toString()
+          }
+        });
       }
       
       // If we have no data at all, throw to return 500
       throw error;
     }
   } catch (error) {
-    console.error('Supply API error:', error);
+    console.warn('API request failed');
     // Don't expose internal error details to client
     return NextResponse.json(
       { error: 'Internal server error', message: 'Failed to process request' },

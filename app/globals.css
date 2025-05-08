@@ -115,8 +115,38 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Modern smooth scrolling behavior for UX */
+    scroll-behavior: smooth;
+    /* Font rendering optimizations */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Better box model handling */
+    box-sizing: border-box;
+    /* Firefox scrollbar settings */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
   }
   body {
     @apply bg-background text-foreground;
+    min-height: 100vh;
+    width: 100vw;
+    overflow-x: hidden;
+    /* Prevent text zoom bugs on mobile */
+    -webkit-text-size-adjust: 100%;
+    /* Prevent double-tap zoom on iOS */
+    touch-action: manipulation;
+    /* Allow layout shift control for keyboard/screen readers */
+    scroll-padding-top: 1rem;
+  }
+  /* Apply fixed position only when viewport is large enough to display all content */
+  @media (min-width: 1200px) and (min-height: 800px) {
+    body {
+      height: 100vh;
+      overflow: hidden;
+      position: fixed;
+    }
   }
 }
