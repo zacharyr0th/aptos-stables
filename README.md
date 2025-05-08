@@ -1,10 +1,17 @@
 # Aptos Stablecoin Supply API
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A simple API service and frontend that provides real-time information about stablecoin supplies on the Aptos blockchain.
 
 ## Overview
 
 This API fetches the current circulating supply of major stablecoins on Aptos using the Aptos Indexer GraphQL API. It handles both token standards (legacy coin standard and newer Fungible-Asset standard) in a unified way.
+
+![Aptos Stablecoins Dashboard](page.png)
+
+You can view detailed information about each stablecoin by clicking on its card:
+
+![Detailed stablecoin information dialog](dialog.png)
 
 ## Supported Stablecoins
 
@@ -91,7 +98,3 @@ To add support for a new stablecoin:
 1. Add the token information to the `TOKENS` object in `app/api/supply/route.ts`
 2. Add metadata for the UI in `app/page.tsx` in the `TOKEN_METADATA` object
 3. Add an icon in the `public/icons` directory
-
-## License
-
-MIT
