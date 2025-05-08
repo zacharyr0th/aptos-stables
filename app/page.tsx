@@ -394,7 +394,7 @@ export default function Home(): React.ReactElement {
         </div>
         
         <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
-          <Header onRefresh={fetchSupplyData} refreshing={refreshing} />
+          <Header />
 
           <main>
             {loading ? (

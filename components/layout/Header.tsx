@@ -1,19 +1,8 @@
 import React from 'react';
-import { RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { ErrorBoundary } from '../errors/ErrorBoundary';
 
-interface HeaderProps {
-  onRefresh: () => void;
-  refreshing: boolean;
-}
-
-const HeaderComponent = ({ onRefresh, refreshing }: HeaderProps): React.ReactElement => {
-  const handleRefresh = React.useCallback(() => {
-    onRefresh();
-  }, [onRefresh]);
-
+const HeaderComponent = (): React.ReactElement => {
   return (
     <ErrorBoundary>
       <header className="mb-4 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -29,15 +18,6 @@ const HeaderComponent = ({ onRefresh, refreshing }: HeaderProps): React.ReactEle
         </div>
         
         <div className="flex items-center gap-3">
-          <Button 
-            onClick={handleRefresh}
-            disabled={refreshing}
-            variant="outline"
-            className="text-sm"
-          >
-            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
           <ThemeToggle />
         </div>
       </header>
