@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 const fontVars = `${geistSans.variable} ${geistMono.variable}`;
 
 export const metadata = {
-  title: "Aptos Stablecoin Supply",
-  description: "Aptos Stablecoin Supply",
+  title: "Aptos Stablecoins",
+  description: "Aptos Stablecoins",
 };
 
 interface RootLayoutProps {

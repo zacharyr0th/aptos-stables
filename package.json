@@ -1,5 +1,5 @@
 {
-  "name": "stable-supply-api",
+  "name": "aptos-stablecoins",
   "version": "0.1.0",
   "private": true,
   "scripts": {
