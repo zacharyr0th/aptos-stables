@@ -22,7 +22,7 @@ const TOKEN_METADATA: Record<string, TokenMetadata> = {
     name: 'Tether USD',
     symbol: 'USDt',
     thumbnail: '/icons/usdt.png',
-    type: 'Native Aptos issuance (not bridged)',
+    type: 'Native Aptos issuance',
     issuer: 'Tether Operations Ltd.',
     assetAddress: '0x357b0b74bc833e95a115ad22604854d6b0fca151cecd94111770e5d6ffc9dc2b::usdt::USDt',
     decimals: 6,

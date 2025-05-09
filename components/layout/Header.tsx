@@ -12,7 +12,7 @@ const HeaderComponent = (): React.ReactElement => {
               Aptos Stablecoins
             </h1>
             <p className="text-muted-foreground text-base sm:text-lg">
-              Real-time stablecoin supply data from the Aptos blockchain
+              Real-time stablecoin supply data
             </p>
           </div>
         </div>
