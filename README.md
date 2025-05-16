@@ -64,6 +64,10 @@ Returns the current supply of each stablecoin and the total supply across all su
 # Install dependencies
 npm install
 
+# Set up environment variables
+cp .env.example .env
+# Edit .env to add your CoinMarketCap API key (required)
+
 # Start the development server
 npm run dev
 
@@ -73,6 +77,10 @@ npm run build
 # Start the production server
 npm run start
 ```
+
+## Environment Variables
+
+- `CMC_API_KEY` (Required): A CoinMarketCap API key for accessing token price data. You must obtain a key from [CoinMarketCap's API Portal](https://coinmarketcap.com/api/).
 
 ## Testing
 

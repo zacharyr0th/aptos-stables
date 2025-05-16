@@ -36,6 +36,7 @@ export interface MarketShareChartProps {
   data: DisplayToken[];
   totalSupply: string;
   tokenMetadata?: Record<string, { assetAddress: string; name?: string }>;
+  susdePrice?: number;
 }
 
 interface ChartDataItem {
@@ -66,6 +67,13 @@ const formatCurrency = (value: bigint): string =>
   new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(Number(value) / 1_000_000);
+
+// New function to format number without currency symbol
+const formatNumber = (value: bigint): string =>
+  new Intl.NumberFormat('en-US', {
     notation: 'compact',
     maximumFractionDigits: 1,
   }).format(Number(value) / 1_000_000);
@@ -137,7 +145,8 @@ const TokenNameCopy: React.FC<{
 
 const CustomLegend: React.FC<{ 
   chartData: ChartDataItem[]; 
-  tokenMetadata?: Record<string, { assetAddress: string; name?: string }> 
+  tokenMetadata?: Record<string, { assetAddress: string; name?: string }>;
+  susdePrice?: number;
 }> = ({ chartData, tokenMetadata }) => {
   if (!chartData.length) return null;
 
@@ -196,7 +205,8 @@ const CustomLegend: React.FC<{
 export function MarketShareChart({ 
   data, 
   totalSupply, 
-  tokenMetadata = {} 
+  tokenMetadata = {},
+  susdePrice
 }: MarketShareChartProps): React.ReactElement {
   const { width } = useWindowSize();
   const total = useMemo(() => BigInt(totalSupply), [totalSupply]);
@@ -220,9 +230,26 @@ export function MarketShareChart({
           ? 'sUSDe/USDe'
           : token.symbol;
 
+      const formatSupplyWithPrice = (supply: bigint, symbol: string) => {
+        let value = supply;
+        // Apply sUSDe price if available and token is sUSDe
+        if (symbol === 'sUSDe' && susdePrice && susdePrice > 0) {
+          // Scale price for BigInt math
+          const priceScaled = Math.round(susdePrice * 1000000);
+          value = (value * BigInt(priceScaled)) / BigInt(1000000);
+        }
+        
+        // For USDT and USDC, use formatNumber instead of formatCurrency
+        if (symbol === 'USDt' || symbol === 'USDC') {
+          return formatNumber(value);
+        }
+        
+        return formatCurrency(value);
+      };
+
       const formattedSupply = isCombined
-        ? token.components.map(c => `${c.symbol}: ${formatCurrency(BigInt(c.supply))}`).join('; ')
-        : formatCurrency(tokenSupply);
+        ? token.components.map(c => `${c.symbol}: ${formatSupplyWithPrice(BigInt(c.supply), c.symbol)}`).join('; ')
+        : formatSupplyWithPrice(tokenSupply, token.symbol);
 
       return {
         name,
@@ -232,7 +259,7 @@ export function MarketShareChart({
         components: isCombined ? token.components : undefined,
       };
     });
-  }, [data, total]);
+  }, [data, total, susdePrice]);
 
   return (
     <div className="flex items-center justify-center w-full h-full">
@@ -267,7 +294,7 @@ export function MarketShareChart({
 
         {isDesktop && (
           <div className="ml-8">
-            <CustomLegend chartData={chartData} tokenMetadata={tokenMetadata} />
+            <CustomLegend chartData={chartData} tokenMetadata={tokenMetadata} susdePrice={susdePrice} />
           </div>
         )}
       </div>

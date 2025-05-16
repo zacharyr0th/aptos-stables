@@ -15,6 +15,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ErrorBoundary } from "@/components/errors/ErrorBoundary";
 import { RootErrorBoundary } from "@/components/errors/RootErrorBoundary";
+import { useCMCData } from "@/hooks/useCMCData";
 import Image from "next/image";
 
 const TOKEN_METADATA: Record<string, TokenMetadata> = {
@@ -105,7 +106,15 @@ interface SupplyData {
 }
 
 // Optimize token card by memoizing expensive calculations and component
-const TokenCard = React.memo(function TokenCard({ token, totalSupply }: { token: DisplayToken; totalSupply: string }): React.ReactElement {
+const TokenCard = React.memo(function TokenCard({ 
+  token, 
+  totalSupply, 
+  susdePrice 
+}: { 
+  token: DisplayToken; 
+  totalSupply: string; 
+  susdePrice?: number 
+}): React.ReactElement {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const { marketSharePercent, formattedDisplaySupply } = useMemo(() => {
@@ -114,9 +123,14 @@ const TokenCard = React.memo(function TokenCard({ token, totalSupply }: { token:
       return ((BigInt(token.supply) * 100n / BigInt(totalSupply))).toString();
     };
 
-    const formatSingle = (s: string) => {
+    const formatSingle = (s: string, symbol: string) => {
       const supplyVal = BigInt(s);
-      const dollars = Number(supplyVal) / 1_000_000;
+      // Apply sUSDe price multiplier if available and token is sUSDe
+      let dollars = Number(supplyVal) / 1_000_000;
+      if (symbol === 'sUSDe' && susdePrice && susdePrice > 0) {
+        dollars = dollars * susdePrice;
+      }
+      
       if (dollars >= 1_000_000_000) return `$${(dollars / 1_000_000_000).toFixed(1)}b`;
       if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(1)}m`;
       if (dollars >= 1_000) return `$${(dollars / 1_000).toFixed(1)}k`;
@@ -128,18 +142,20 @@ const TokenCard = React.memo(function TokenCard({ token, totalSupply }: { token:
         const susde = token.components.find(c => c.symbol === 'sUSDe');
         const usde = token.components.find(c => c.symbol === 'USDe');
         const parts: string[] = [];
-        if (susde) parts.push(formatSingle(susde.supply));
-        if (usde) parts.push(formatSingle(usde.supply));
+        
+        if (susde) parts.push(formatSingle(susde.supply, 'sUSDe'));
+        if (usde) parts.push(formatSingle(usde.supply, 'USDe'));
+        
         return parts.join(' / ');
       }
-      return formatSingle(token.supply);
+      return formatSingle(token.supply, token.symbol);
     };
 
     return {
       marketSharePercent: calcMarketShare(),
       formattedDisplaySupply: calcFormattedDisplay()
     };
-  }, [token, totalSupply]);
+  }, [token, totalSupply, susdePrice]);
 
   const cardSymbol = token.symbol;
   const representativeSymbolForColor = ('isCombined' in token && token.isCombined) ? 'USDe' : token.symbol;
@@ -198,6 +214,15 @@ const TokenCard = React.memo(function TokenCard({ token, totalSupply }: { token:
           onClose={() => setIsDialogOpen(false)}
           metadata={metadata}
           supply={formattedDisplaySupply}
+          susdePrice={
+            // Pass the price for both standalone sUSDe and combined tokens
+            token.symbol === 'sUSDe' || 
+            token.symbol === 'sUSDe / USDe' || 
+            // Also for combined tokens with sUSDe component
+            ('isCombined' in token && token.components.some(c => c.symbol === 'sUSDe')) 
+              ? susdePrice 
+              : undefined
+          }
         />
       )}
     </>
@@ -293,6 +318,24 @@ export default function Home(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  
+  // Get sUSDe price data from CMC - fetch on component mount with no caching
+  const { data: cmcData, error: cmcError } = useCMCData();
+  
+  // Log the CMC data to help debug price issues
+  useEffect(() => {
+    if (cmcData) {
+      console.log('CMC price data loaded:', {
+        price: cmcData.price,
+        type: typeof cmcData.price,
+        symbol: cmcData.symbol,
+        updated: cmcData.updated
+      });
+    }
+    if (cmcError) {
+      console.error('CMC price error:', cmcError);
+    }
+  }, [cmcData, cmcError]);
 
   const fetchSupplyData = useCallback(async (): Promise<void> => {
     try {
@@ -340,12 +383,26 @@ export default function Home(): React.ReactElement {
     return () => clearInterval(interval);
   }, [fetchSupplyData]);
 
-  const { formattedTotalSupply, processedSupplies } = useMemo(() => {
-    if (!data) return { formattedTotalSupply: '', processedSupplies: [] };
+  const { formattedTotalSupply, processedSupplies, adjustedTotal } = useMemo(() => {
+    if (!data) return { formattedTotalSupply: '', processedSupplies: [], adjustedTotal: '0' };
+
+    const susdePrice = cmcData?.price || 1; // Default to 1 if price not available
+    
+    // Calculate adjusted total based on sUSDe price
+    let adjustedTotalValue = BigInt(0);
+    for (const token of data.supplies) {
+      let tokenValue = BigInt(token.supply);
+      if (token.symbol === 'sUSDe' && susdePrice !== 1) {
+        // Convert to a scaled integer value for BigInt math
+        const priceScaled = Math.round(susdePrice * 1000000);
+        tokenValue = (tokenValue * BigInt(priceScaled)) / BigInt(1000000);
+      }
+      adjustedTotalValue += tokenValue;
+    }
 
     const formatTotal = () => {
-      const supply = BigInt(data.total);
-      const dollars = Number(supply) / 1_000_000;
+      // Use adjustedTotalValue instead of data.total
+      const dollars = Number(adjustedTotalValue) / 1_000_000;
       return new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
@@ -382,9 +439,10 @@ export default function Home(): React.ReactElement {
 
     return {
       formattedTotalSupply: formatTotal(),
-      processedSupplies: processSupplies()
+      processedSupplies: processSupplies(),
+      adjustedTotal: adjustedTotalValue.toString()
     };
-  }, [data]);
+  }, [data, cmcData]);
 
   return (
     <RootErrorBoundary>
@@ -419,7 +477,8 @@ export default function Home(): React.ReactElement {
                       <TokenCard
                         key={token.symbol}
                         token={token}
-                        totalSupply={data.total}
+                        totalSupply={adjustedTotal}
+                        susdePrice={cmcData?.price}
                       />
                     ))}
                   </div>
@@ -435,8 +494,9 @@ export default function Home(): React.ReactElement {
                     }>
                       <MarketShareChart 
                         data={processedSupplies} 
-                        totalSupply={data.total} 
+                        totalSupply={adjustedTotal} 
                         tokenMetadata={TOKEN_METADATA}
+                        susdePrice={cmcData?.price}
                       />
                     </ErrorBoundary>
                   </div>

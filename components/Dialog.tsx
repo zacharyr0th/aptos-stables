@@ -21,6 +21,7 @@ interface TokenDialogProps {
   onClose: () => void;
   metadata: TokenMetadata;
   supply: string;
+  susdePrice?: number;
 }
 
 interface TokenMetadata {
@@ -45,11 +46,14 @@ interface SupplyApiResponse {
   total: string;
 }
 
+const COINMARKETCAP_SUSDE_URL = "https://coinmarketcap.com/currencies/ethena-staked-usde/";
+
 const TokenDialog: React.FC<TokenDialogProps> = ({
   isOpen,
   onClose,
   metadata,
-  supply
+  supply,
+  susdePrice
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [fullSupplyData, setFullSupplyData] = useState<Record<string, string>>({});
@@ -88,6 +92,17 @@ const TokenDialog: React.FC<TokenDialogProps> = ({
     }
   }, [isOpen]);
 
+  // Add debug logging for price
+  useEffect(() => {
+    if (isOpen) {
+      console.log('TokenDialog opened with price:', {
+        symbol: metadata.symbol,
+        susdePrice,
+        type: typeof susdePrice
+      });
+    }
+  }, [isOpen, metadata.symbol, susdePrice]);
+
   const handleCopy = useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`Copied ${label} to clipboard`);
@@ -122,37 +137,118 @@ const TokenDialog: React.FC<TokenDialogProps> = ({
       return <span className="text-muted-foreground text-sm">Loading...</span>;
     }
 
+    const getTokenIcon = (symbol: string) => {
+      const iconMap: Record<string, string> = {
+        'USDe': '/icons/usde.png',  // Darker image for USDe
+        'sUSDe': '/icons/susde.png', // Lighter image for sUSDe
+        'USDC': '/icons/usdc.png',
+        'USDt': '/icons/usdt.png'
+      };
+      
+      return iconMap[symbol] || '/icons/aptos.png';
+    };
+
     const formatFullAmount = (symbol: string) => {
       // Get the raw value from API data
       const rawSupply = fullSupplyData[symbol];
       if (!rawSupply) return supply; // Fall back to abbreviated value if not found
       
       // Convert to decimal based on token decimals
-      const value = Number(BigInt(rawSupply)) / Math.pow(10, metadata.decimals);
+      const tokenCount = Number(BigInt(rawSupply)) / Math.pow(10, metadata.decimals);
       
-      return new Intl.NumberFormat('en-US', {
+      // Format the token count
+      const formattedTokenCount = new Intl.NumberFormat('en-US', {
+        maximumFractionDigits: 0
+      }).format(tokenCount);
+      
+      // For sUSDe, always show token count with @ price as a clickable link
+      if (symbol === 'sUSDe') {
+        // Only show price if available
+        if (typeof susdePrice === 'number' && !isNaN(susdePrice) && susdePrice > 0) {
+          return (
+            <>
+              {formattedTokenCount}
+              <a 
+                href={COINMARKETCAP_SUSDE_URL} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline ml-1"
+              >
+                <ExternalLink className="h-3 w-3 inline" />
+              </a>
+            </>
+          );
+        }
+        return formattedTokenCount;
+      }
+      
+      // For USDe, just show the token count
+      if (symbol === 'USDe') {
+        return formattedTokenCount;
+      }
+      
+      // For USDT and USDC, show formatted number without $ sign
+      if (symbol === 'USDt' || symbol === 'USDC') {
+        return formattedTokenCount;
+      }
+      
+      // For other tokens, show the USD value
+      const formattedDollarValue = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
         maximumFractionDigits: 2
-      }).format(value);
+      }).format(tokenCount);
+      
+      return formattedDollarValue;
     };
     
     // Handle combined token case (sUSDe / USDe)
     if (symbolParts.length > 1) {
       return (
         <div className="space-y-1">
-          {symbolParts.map((symbol, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span>{symbol}: {formatFullAmount(symbol)}</span>
-            </div>
-          ))}
+          {symbolParts.map((symbol, i) => {
+            const trimmedSymbol = symbol.trim();
+            const iconSrc = getTokenIcon(trimmedSymbol);
+            
+            return (
+              <div key={i} className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="h-5 w-5 relative">
+                    <Image
+                      src={iconSrc}
+                      alt={trimmedSymbol}
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                  <span>{trimmedSymbol}: {formatFullAmount(trimmedSymbol)}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       );
     }
     
     // Handle single token case
-    return <span>{formatFullAmount(metadata.symbol)}</span>;
-  }, [supply, fullSupplyData, isLoadingSupply, symbolParts, metadata]);
+    const iconSrc = getTokenIcon(metadata.symbol);
+    
+    return (
+      <div>
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-5 relative">
+            <Image
+              src={iconSrc}
+              alt={metadata.symbol}
+              fill
+              className="object-contain"
+            />
+          </div>
+          <span>{formatFullAmount(metadata.symbol)}</span>
+        </div>
+      </div>
+    );
+  }, [supply, fullSupplyData, isLoadingSupply, symbolParts, metadata, susdePrice]);
 
   const formattedExplorerLinks = useMemo(() => {
     const links = metadata.explorerLink.split('\n');
